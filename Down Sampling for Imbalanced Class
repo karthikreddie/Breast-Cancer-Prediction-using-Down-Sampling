@@ -1,0 +1,85 @@
+install.packages("mlbench")
+
+library(mlbench)
+
+data = data("BreastCancer", package = 'mlbench')
+data = BreastCancer[complete.cases(BreastCancer),] #Remove all missing values
+
+dim(data)
+summary(data)
+str(data)
+
+#Remove id column 
+
+data$Id = NULL
+
+#Convert columns to numeric since glm model automatically dummifies the categorical variable
+
+for(i in 1:9) {
+  data[,i] = as.numeric(as.character(data[,i]))
+}
+
+
+str(data) #All variables have now been converted to numeric data type except dependent variable 
+
+
+#Now change target varible to 0's and 1's 
+
+data$Class = ifelse(data$Class == "malignant", 1, 0)
+data$Class = factor(data$Class , levels = c(0,1))
+
+#Prepare training and test data
+
+options(scipen = 999)
+set.seed(1001)
+library(caret)
+data_index = createDataPartition( data$Class, p = 0.7, list = F) 
+
+train_data = data[data_index, ]
+test_data  = data[-data_index, ]
+
+table(train_data$Class)
+table(data$Class)
+summary(train_data)
+#The data looks little biased towards Benign class in 2:1 ratio with respect to malignant
+#Hence sampling technique needs to applied so that the predictions are not biased
+
+#DownSampling
+'%ni%' = Negate('%in%')
+set.seed(222)
+
+down_data = downSample(x = train_data[, colnames(train_data) %ni% "Class"],
+                       y = train_data$Class)
+table(down_data$Class)
+summary(down_data)
+
+#DownSampling
+
+set.seed(201)
+up_data = upSample(x = train_data[, colnames(train_data) %in% "Class"],
+                   y = train_data$Class)
+
+table(up_data$Class)
+summary(up_data)
+
+#Build a logistic regression model
+
+data_model_down = glm(Class ~ Cl.thickness + Cell.size + Cell.shape, 
+                 family = "binomial",
+                 data = down_data)
+summary(data_model_down)
+
+#Predict on the test data
+
+pred = predict(data_model_down, newdata = test_data, type = "response")
+pred
+
+
+#Recode the factors
+pred_num = ifelse( pred > 0.5, 1, 0)
+preds = factor(pred_num, levels = c(0,1))
+acts = test_data$Class
+
+mean(preds == acts)
+
+#We are getting an accuracy of 91% which is good
